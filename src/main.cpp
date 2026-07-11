@@ -6,6 +6,8 @@
 #include "timer.h"
 #include <omp.h>
 
+using namespace std;
+
 int main(int argc, char** argv) {
     int K = 5; // default per spec
     if (argc > 1) {
@@ -44,7 +46,8 @@ int main(int argc, char** argv) {
     printf("Static  total: %.4f sec\n", t2 - t1);
     printf("Dynamic total: %.4f sec\n", t4 - t3);
     double load_time = t.stop_ms();
-    std::cout << "[main] Load time: " << load_time << " ms" << std::endl;
+    printf("[main] Load time: %.4f ms\n", load_time);
+    benchmark_thread_counts("data/synthetic_credit_fraud.csv", num_features);
 
     // Module 2 + 3 would run here once implemented
 

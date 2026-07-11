@@ -8,6 +8,45 @@
 #include <omp.h>
 using namespace std;
 
+void benchmark_thread_counts(
+    const string& filepath,
+    int num_features
+) {
+    int thread_counts[4] = {1,2,4,8};
+    printf("\n===== THREAD COUNT BENCHMARK (schedule static) =====\n");
+    for(int i = 0 ; i < 4; i++){
+        int tc = threads_counts[i];
+        omp_set_num_threads(tc);
+
+        vector<float> features;
+        vector<int> labels;
+        int num_rows = 0;
+
+        double t_start = omp_get_wtime();
+        load_and_normalize_csv(filepath, features, labels, num_rows,num_features);
+        double t_end = omp_get_wtime();
+
+        printf("-> Threads %d | Total time: %.4f sec\n", tc, t_end - t_start);
+
+    }
+
+    printf("\n===== THREAD COUNT BENCHMARK (schedule dynamic) =====\n");
+    for(int i = 0 ; i < 4; i++){
+        int tc = thread_counts[i];
+        omp_set_num_threads(tc);
+
+        vector<float> features;
+        vector<int> labels;
+        int num_rows = 0;
+
+        double t_start = omp_get_wtime();
+        load_and_normalize_csv_dynamic(filepath,features,labels,num_rows, num_features);
+        double t_end = omp_get_wtime();
+
+        printf("-> Threads: %d | Total time: %.4f sec\n", tc,t_end-t_start);
+    }
+}
+
 void load_and_normalize_csv_dynamic(
     const string& filepath,
     vector<float>& features_out,
