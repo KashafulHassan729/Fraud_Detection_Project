@@ -25,12 +25,12 @@ void load_and_normalize_csv_dynamic(
     string line;
     getline(file,line);
 
-    double_t_read_start = omp_get_wtime();
+    double t_read_start = omp_get_wtime();
 
     vector<string> raw_lines;
-    while(getline(file,line){
+    while(getline(file,line)){
         if(!line.empty()) raw_lines.push_back(line);
-    })
+    }
 
     file.close();
 
@@ -82,7 +82,7 @@ void load_and_normalize_csv_dynamic(
     }
 
     double t_minmax_end = omp_get_wtime();
-    printf('[preprocessing-dynamic] Min/max scan (parallel): %.4f sec\n', t_minmax_end - t_minmax_start);
+    printf("[preprocessing-dynamic] Min/max scan (parallel): %.4f sec\n", t_minmax_end - t_minmax_start);
 
     double t_norm_start = omp_get_wtime();
 
@@ -100,11 +100,9 @@ void load_and_normalize_csv_dynamic(
     }
 
     double t_norm_end = omp_get_wtime();
-    printf("[preproccesing-dynamic] Normalization (parallel): %.4f sec\n", t_norm_end - t_norm_start);
-    printf("[preprocessing-dynamic] Loaded %d rows, %d features each. \n", num_rows, num_features);
-    printf("[preprocessing-dynamic] Normalization complete! \n")
-
-
+    printf("[preprocessing-dynamic] Normalization (parallel): %.4f sec\n", t_norm_end - t_norm_start);
+    printf("[preprocessing-dynamic] Loaded %d rows, %d features each.\n", num_rows, num_features);
+    printf("[preprocessing-dynamic] Normalization complete!\n");
 }
 
 void load_and_normalize_csv(
