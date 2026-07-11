@@ -15,7 +15,7 @@ void benchmark_thread_counts(
     int thread_counts[4] = {1,2,4,8};
     printf("\n===== THREAD COUNT BENCHMARK (schedule static) =====\n");
     for(int i = 0 ; i < 4; i++){
-        int tc = threads_counts[i];
+        int tc = thread_counts[i];
         omp_set_num_threads(tc);
 
         vector<float> features;
