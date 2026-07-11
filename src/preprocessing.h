@@ -19,6 +19,6 @@ void load_and_normalize_csv_dynamic(
     vector<int>& labels_out,
     int& num_rows,
     int num_features
-)
+);
 
 #endif
