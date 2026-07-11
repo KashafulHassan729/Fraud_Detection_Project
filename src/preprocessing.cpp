@@ -3,6 +3,8 @@
 #include <fstream>
 #include <sstream>
 #include <cstdio>
+#include <string>
+#include <limits>
 using namespace std;
 
 void load_and_normalize_csv(
@@ -57,5 +59,30 @@ void load_and_normalize_csv(
     num_rows = row;
 
     printf("[preprocessing] Loaded %d rows, %d features each. \n", num_rows, num_features);
+
+    vector<float> col_min(num_features, 1e9f);
+    vector<float> col_max(num_features, -1e9f);
+
+    for(int r = 0; r < num_rows; r++){
+        for(int c = 0 ; c < num_features; c++){
+            float val = features_out[(size_t)r *num_features + c];
+            if(val < col_min[c]) col_min[c] = val;
+            if(val > col_max[c]) col_max[c] = val;
+        }
+    }
+
+    for(int r = 0 ; r < num_rows; r++){
+        for(int c= 0 ; c < num_features; c++){
+            size_t idx = (size_t)r * num_features + c;
+            float range = col_max[c] - col_min[c];
+            if(range > 0.0f){
+                features_out[idx] = (features_out[idx] - col_min[c]) / range;
+            } else {
+                features_out[idx] = 0.0f;
+            }
+        }
+    }
+
+    printf("[preprocessing] Normalization complete!")
 
 }
