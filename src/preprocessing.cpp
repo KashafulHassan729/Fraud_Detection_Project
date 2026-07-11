@@ -14,7 +14,7 @@ void load_and_normalize_csv(
     int& num_rows,
     int num_features
 ) {
-    ifstream file(filepath):
+    ifstream file(filepath);
     if(!file.is_open()){
         fprintf(stderr, "[preprocessing] ERROR: could not open %s\n", filepath.c_str());
         num_rows = 0;
@@ -45,7 +45,7 @@ void load_and_normalize_csv(
         string cell;
 
         for(int col = 0 ; col < num_features; col++){
-            getline(ss,cel,",");
+            getline(ss,cel,',');
             features_out[(size_t)row * num_features + col] = stof(cell);
         }
 
@@ -83,6 +83,6 @@ void load_and_normalize_csv(
         }
     }
 
-    printf("[preprocessing] Normalization complete!")
+    printf("[preprocessing] Normalization complete!\n");
 
 }
