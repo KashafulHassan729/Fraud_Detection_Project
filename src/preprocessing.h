@@ -1,4 +1,4 @@
-#ifndef PREPROCCESING_H
+#ifndef PREPROCESSING_H
 #define PREPROCESSING_H
 
 #include <vector>
@@ -11,6 +11,6 @@ void load_and_normalize_csv(
     vector<int>& labels_out,
     int& num_rows,
     int num_features
-)
+);
 
 #endif
