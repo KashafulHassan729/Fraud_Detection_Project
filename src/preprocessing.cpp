@@ -45,7 +45,7 @@ void load_and_normalize_csv(
         string cell;
 
         for(int col = 0 ; col < num_features; col++){
-            getline(ss,cel,',');
+            getline(ss,cell,',');
             features_out[(size_t)row * num_features + col] = stof(cell);
         }
 
