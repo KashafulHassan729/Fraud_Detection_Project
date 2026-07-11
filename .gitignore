@@ -1,0 +1,7 @@
+data\synthetic_credit_fraud.csv 
+output\*.csv 
+*.o 
+*.obj 
+build\ 
+.vscode\ 
+__pycache__\ 
