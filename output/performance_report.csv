@@ -1,0 +1,2 @@
+K,num_rows,num_features,static_sec,dynamic_sec,naive_kernel_ms,tiled_kernel_ms,pageable_copy_ms,pinned_copy_ms,hybrid_kernel_ms,hybrid_transfer_ms,hybrid_cpu_prep_ms
+5,500000,16,2.3146,2.0768,0.4653,0.5875,6.9248,2.6141,0.0453,0.0931,43.1521
