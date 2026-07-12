@@ -41,19 +41,17 @@ void benchmark_pinned_vs_pageable(
 );
 
 // ===== Module 4: hybrid batched streaming pipeline =====
-// Splits num_rows historical records into batches, uses 2 non-default
-// CUDA streams so GPU compute on batch N overlaps with async H2D
-// transfer of batch N+1. Requires h_historical to be pinned memory
-// for the async copies to actually run concurrently with compute.
 void compute_distances_hybrid_streamed(
     const float* h_query,
-    const float* h_historical_pinned,
+    const float* h_source,
     float* h_distances_out,
     int num_rows,
     int num_features,
     int batch_size,
     float& total_kernel_ms_out,
-    float& total_transfer_ms_out
+    float& total_transfer_ms_out,
+    float& total_cpu_prep_ms_out
 );
 
 #endif
+

@@ -4,14 +4,13 @@
 #include <cstdlib>
 #include <cstring>
 #include <algorithm>
+#include <future>
+#include <omp.h>
 
 #define TILE_ROWS 256
 
 // ================= Module 2a: Naive baseline kernel =================
-// 1 thread computes 1 distance. Each thread strides through global
-// memory with stride = num_features between consecutive threads'
-// accesses at a fixed feature index -> NOT coalesced. This is the
-// "bad" version we compare the tiled kernel against.
+
 __global__ void distance_kernel_naive(
     const float* query,
     const float* historical,
@@ -31,15 +30,7 @@ __global__ void distance_kernel_naive(
 }
 
 // ================= Module 2b: Tiled shared-memory kernel =================
-// Blocking strategy:
-//   - Each block owns a tile of TILE_ROWS historical rows (row blocking).
-//   - The block cooperatively loads that whole tile (all num_features
-//     columns for those rows) into shared memory in ONE pass, using a
-//     flat index so consecutive threads read consecutive global memory
-//     addresses -> fully coalesced load.
-//   - After __syncthreads(), each thread computes its own row's distance
-//     by reading from fast on-chip shared memory instead of global memory.
-// The query vector is also cached in shared memory once per block.
+
 __global__ void distance_kernel_tiled(
     const float* __restrict__ query,
     const float* __restrict__ historical,
@@ -51,7 +42,7 @@ __global__ void distance_kernel_tiled(
     float* s_query = smem;                    // size: num_features
     float* s_tile  = smem + num_features;      // size: TILE_ROWS * num_features
 
-    // Load query into shared memory (cheap, done by every block once)
+    // Load query into shared memory
     for (int i = threadIdx.x; i < num_features; i += blockDim.x) {
         s_query[i] = query[i];
     }
@@ -59,9 +50,7 @@ __global__ void distance_kernel_tiled(
     int row_block_start = blockIdx.x * TILE_ROWS;
     int tile_elems = TILE_ROWS * num_features;
 
-    // Coalesced cooperative load: historical is row-major, so
-    // historical[row_block_start*num_features + e] is contiguous as e
-    // increases. Consecutive threadIdx.x values -> consecutive addresses.
+
     for (int e = threadIdx.x; e < tile_elems; e += blockDim.x) {
         int global_row = row_block_start + e / num_features;
         if (global_row < num_rows) {
@@ -69,7 +58,7 @@ __global__ void distance_kernel_tiled(
         }
     }
 
-    __syncthreads(); // MUST finish loading before any thread reads s_tile
+    __syncthreads();
 
     int local_row  = threadIdx.x;
     int global_row = row_block_start + local_row;
@@ -242,23 +231,37 @@ void benchmark_pinned_vs_pageable(
 }
 
 // ================= Module 4: Hybrid batched + streamed pipeline =================
-// Double-buffered, 2-stream design:
-//   - Historical data is split into batches of `batch_size` rows.
-//   - Stream A and Stream B alternate: while stream X runs the tiled
-//     kernel on batch N, stream Y issues the async H2D copy for batch
-//     N+1 in parallel (this is the actual "overlap compute with next
-//     batch's transfer" requirement).
-//   - h_historical_pinned MUST be pinned (cudaHostAlloc) or
-//     cudaMemcpyAsync silently falls back to synchronous behavior.
+
+static void prepare_batch_cpu(
+    const float* h_source,
+    float* h_pinned_dst,
+    int row_start,
+    int rows_this_batch,
+    int num_features
+) {
+   
+    #pragma omp parallel for schedule(static)
+    for (int r = 0; r < rows_this_batch; r++) {
+        for (int f = 0; f < num_features; f++) {
+            size_t idx = (size_t)(row_start + r) * num_features + f;
+            float v = h_source[idx];
+            if (v < 0.0f) v = 0.0f;
+            if (v > 1.0f) v = 1.0f;
+            h_pinned_dst[(size_t)r * num_features + f] = v;
+        }
+    }
+}
+
 void compute_distances_hybrid_streamed(
     const float* h_query,
-    const float* h_historical_pinned,
+    const float* h_source,
     float* h_distances_out,
     int num_rows,
     int num_features,
     int batch_size,
     float& total_kernel_ms_out,
-    float& total_transfer_ms_out
+    float& total_transfer_ms_out,
+    float& total_cpu_prep_ms_out
 ) {
     const int NUM_STREAMS = 2;
     cudaStream_t streams[NUM_STREAMS];
@@ -268,18 +271,18 @@ void compute_distances_hybrid_streamed(
     cudaMalloc(&d_query, num_features * sizeof(float));
     cudaMemcpy(d_query, h_query, num_features * sizeof(float), cudaMemcpyHostToDevice);
 
-    // Double-buffered device memory: one buffer per stream slot
+    // Double-buffered PINNED staging (CPU writes here, GPU reads via async copy)
+    float* h_pinned_buf[NUM_STREAMS];
     float* d_historical_buf[NUM_STREAMS];
     float* d_distances_buf[NUM_STREAMS];
     for (int s = 0; s < NUM_STREAMS; s++) {
+        cudaHostAlloc((void**)&h_pinned_buf[s], (size_t)batch_size * num_features * sizeof(float), cudaHostAllocDefault);
         cudaMalloc(&d_historical_buf[s], (size_t)batch_size * num_features * sizeof(float));
         cudaMalloc(&d_distances_buf[s], batch_size * sizeof(float));
     }
 
     int num_batches = (num_rows + batch_size - 1) / batch_size;
 
-    // Separate event pairs so transfer time and kernel time are logged
-    // independently, per the assignment's requirement.
     cudaEvent_t xfer_start[NUM_STREAMS], xfer_stop[NUM_STREAMS];
     cudaEvent_t kern_start[NUM_STREAMS], kern_stop[NUM_STREAMS];
     for (int s = 0; s < NUM_STREAMS; s++) {
@@ -289,30 +292,52 @@ void compute_distances_hybrid_streamed(
 
     total_kernel_ms_out = 0.0f;
     total_transfer_ms_out = 0.0f;
+    total_cpu_prep_ms_out = 0.0f;
+
+    auto batch_rows = [&](int b) {
+        int row_start = b * batch_size;
+        return std::min(batch_size, num_rows - row_start);
+    };
+
+    // Prepare batch 0 synchronously (nothing to overlap with yet)
+    double t0 = omp_get_wtime();
+    prepare_batch_cpu(h_source, h_pinned_buf[0], 0, batch_rows(0), num_features);
+    total_cpu_prep_ms_out += (omp_get_wtime() - t0) * 1000.0;
 
     for (int b = 0; b < num_batches; b++) {
         int slot = b % NUM_STREAMS;
+        int next_slot = (b + 1) % NUM_STREAMS;
         cudaStream_t s = streams[slot];
 
         int row_start = b * batch_size;
-        int rows_this_batch = std::min(batch_size, num_rows - row_start);
+        int rows_this_batch = batch_rows(b);
         size_t bytes_this_batch = (size_t)rows_this_batch * num_features * sizeof(float);
 
-        // Async H2D copy of this batch on this stream's buffer
+        // Launch CPU prep for batch N+1 on a background thread FIRST,
+        
+        std::future<double> cpu_future;
+        bool has_next = (b + 1 < num_batches);
+        if (has_next) {
+            int next_row_start = (b + 1) * batch_size;
+            int next_rows = batch_rows(b + 1);
+            cpu_future = std::async(std::launch::async, [&, next_row_start, next_rows, next_slot]() -> double {
+                double t_start = omp_get_wtime();
+                prepare_batch_cpu(h_source, h_pinned_buf[next_slot], next_row_start, next_rows, num_features);
+                return (omp_get_wtime() - t_start) * 1000.0;
+            });
+        }
+
+        // GPU side for CURRENT batch
         cudaEventRecord(xfer_start[slot], s);
         cudaMemcpyAsync(
             d_historical_buf[slot],
-            h_historical_pinned + (size_t)row_start * num_features,
+            h_pinned_buf[slot],
             bytes_this_batch,
             cudaMemcpyHostToDevice,
             s
         );
         cudaEventRecord(xfer_stop[slot], s);
 
-        // Tiled kernel launch on the SAME stream, right after its own
-        // copy -> operations queued on stream B (slot 1) can run
-        // concurrently with stream A (slot 0)'s copy/compute, giving
-        // the overlap between batch N compute and batch N+1 transfer.
         int blocks = (rows_this_batch + TILE_ROWS - 1) / TILE_ROWS;
         size_t shmem_bytes = (num_features + (size_t)TILE_ROWS * num_features) * sizeof(float);
 
@@ -322,7 +347,6 @@ void compute_distances_hybrid_streamed(
         );
         cudaEventRecord(kern_stop[slot], s);
 
-        // Async D2H copy of results back
         cudaMemcpyAsync(
             h_distances_out + row_start,
             d_distances_buf[slot],
@@ -330,12 +354,15 @@ void compute_distances_hybrid_streamed(
             cudaMemcpyDeviceToHost,
             s
         );
+
+        
+        if (has_next) {
+            total_cpu_prep_ms_out += cpu_future.get();
+        }
     }
 
     for (int s = 0; s < NUM_STREAMS; s++) cudaStreamSynchronize(streams[s]);
 
-    // Accumulate logged times (synchronize each event pair now that all
-    // streams are done, so cudaEventElapsedTime is safe to call)
     for (int s = 0; s < NUM_STREAMS; s++) {
         float t_ms;
         cudaEventElapsedTime(&t_ms, xfer_start[s], xfer_stop[s]);
@@ -345,12 +372,14 @@ void compute_distances_hybrid_streamed(
     }
 
     printf("[hybrid] Batches: %d | Batch size: %d\n", num_batches, batch_size);
+    printf("[hybrid] Total CPU prep time (overlapped, logged): %.4f ms\n", total_cpu_prep_ms_out);
     printf("[hybrid] Total async transfer time (logged): %.4f ms\n", total_transfer_ms_out);
     printf("[hybrid] Total kernel time (logged): %.4f ms\n", total_kernel_ms_out);
 
     for (int s = 0; s < NUM_STREAMS; s++) {
         cudaEventDestroy(xfer_start[s]); cudaEventDestroy(xfer_stop[s]);
         cudaEventDestroy(kern_start[s]); cudaEventDestroy(kern_stop[s]);
+        cudaFreeHost(h_pinned_buf[s]);
         cudaFree(d_historical_buf[s]);
         cudaFree(d_distances_buf[s]);
         cudaStreamDestroy(streams[s]);

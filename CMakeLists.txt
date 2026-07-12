@@ -24,6 +24,7 @@ target_link_libraries(fraud_detector
     PRIVATE
     OpenMP::OpenMP_CXX
     CUDA::cudart
+    Threads::Threads
 )
 
 target_include_directories(fraud_detector PRIVATE src)
