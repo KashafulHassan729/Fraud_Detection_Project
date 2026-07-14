@@ -1,0 +1,10 @@
+mode,threads,time_sec,speedup_vs_serial
+serial,1,1.9951,1.0000
+static,1,2.0360,0.9799
+static,2,3.0948,0.6447
+static,4,1.9622,1.0168
+static,8,1.8930,1.0540
+dynamic,1,2.1415,0.9317
+dynamic,2,1.9457,1.0254
+dynamic,4,1.9584,1.0188
+dynamic,8,3.0542,0.6532
