@@ -5,3 +5,5 @@ output\*.csv
 build\ 
 .vscode\ 
 __pycache__\ 
+build/
+output/fraud_detector
