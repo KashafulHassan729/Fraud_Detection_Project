@@ -69,11 +69,6 @@ int main(int argc, char** argv) {
         num_rows, num_features, batch_size,
         hybrid_kernel_ms, hybrid_transfer_ms, hybrid_cpu_prep_ms
     );
-
-    // ===== Module 3: Decision & Voting Engine =====
-    // Runs serial (T1 baseline), atomic, and reduction for each K, and
-    // logs speedup S = Tserial / Tparallel for each parallel mode --
-    // required for the report's Work-Span / speedup analysis.
     printf("\n===== MODULE 3: DECISION & VOTING (K sweep) =====\n");
 
     vector<int> K_values = {3, 5, 7, 11};
@@ -115,7 +110,7 @@ int main(int argc, char** argv) {
     }
     if (module3_csv) fclose(module3_csv);
 
-    // ===== Hardcoded validation queries (spec requirement: 3+ test cases) =====
+    // ===== Hardcoded validation queries (3+ test cases) =====
     printf("\n===== VALIDATION QUERIES =====\n");
     struct TestQuery { const char* name; vector<float> vec; };
     vector<TestQuery> testQueries = {
