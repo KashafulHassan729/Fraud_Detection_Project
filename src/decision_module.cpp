@@ -103,6 +103,7 @@ int classify_by_knn(
 
     return prediction;
 }
+
 static int voteSerial(const std::vector<Neighbor>& neighbors, const std::vector<int>& labels) {
     int counts[2] = {0, 0};
     for (const auto& nb : neighbors) {
