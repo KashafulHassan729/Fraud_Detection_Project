@@ -52,9 +52,7 @@ static std::vector<Neighbor> selectTopK_partial(const std::vector<float>& distan
     merged.reserve((size_t)maxThreads * K);
     for (auto& v : threadLocalTopK) merged.insert(merged.end(), v.begin(), v.end());
 
-    std::partial_sort(merged.begin(),
-                       merged.begin() + std::min((size_t)K, merged.size()),
-                       merged.end(), byDistAsc);
+    std::partial_sort(merged.begin(),merged.begin() + std::min((size_t)K, merged.size()),merged.end(), byDistAsc);
     if ((int)merged.size() > K) merged.resize(K);
     return merged;
 }
