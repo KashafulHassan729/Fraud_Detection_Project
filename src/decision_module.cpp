@@ -15,15 +15,6 @@ struct Neighbor {
 static bool byDistAsc(const Neighbor& a, const Neighbor& b) {
     return a.dist < b.dist;
 }
-
-// -----------------------------------------------------------------------
-// PARALLEL: Nearest Neighbor Extraction (Partial Selection)
-// -----------------------------------------------------------------------
-// Full sort is disallowed by the spec. Instead: each thread keeps its own
-// bounded max-heap of size K over its chunk of the distance array. The
-// heap's top() is always the CURRENT WORST (largest-distance) neighbor kept
-// so far, so a new candidate only needs O(log K) work to decide whether it
-// belongs in the top-K. Total cost is O(n log K) instead of O(n log n).
 static std::vector<Neighbor> selectTopK_partial(const std::vector<float>& distances, int K) {
     int n = (int)distances.size();
     if (K <= 0 || n <= 0) return {};
@@ -61,20 +52,10 @@ static std::vector<Neighbor> selectTopK_partial(const std::vector<float>& distan
     merged.reserve((size_t)maxThreads * K);
     for (auto& v : threadLocalTopK) merged.insert(merged.end(), v.begin(), v.end());
 
-    std::partial_sort(merged.begin(),
-                       merged.begin() + std::min((size_t)K, merged.size()),
-                       merged.end(), byDistAsc);
+    std::partial_sort(merged.begin(),merged.begin() + std::min((size_t)K, merged.size()),merged.end(), byDistAsc);
     if ((int)merged.size() > K) merged.resize(K);
     return merged;
 }
-
-// -----------------------------------------------------------------------
-// PARALLEL: Majority Voting Framework (atomic vs reduction)
-// -----------------------------------------------------------------------
-// Race condition being guarded against: without synchronization, two
-// threads could both read counts[label], both increment locally, and both
-// write back the same incremented value -- one increment is silently lost
-// (a classic read-modify-write race). Document this explicitly in your report.
 static int voteAtomic(const std::vector<Neighbor>& neighbors, const std::vector<int>& labels) {
     int counts[2] = {0, 0};
     int K = (int)neighbors.size();
@@ -122,17 +103,6 @@ int classify_by_knn(
 
     return prediction;
 }
-
-// -----------------------------------------------------------------------
-// SERIAL BASELINE (T1 reference) -- no OpenMP anywhere in this function.
-// -----------------------------------------------------------------------
-// Selection: plain std::partial_sort over the whole distance array. Still
-// avoids a FULL sort (partial_sort is O(n log K) same as the parallel
-// version's asymptotic complexity) -- the serial/parallel comparison here
-// isolates the effect of THREADING, not a different algorithm, which is
-// what makes the resulting speedup number meaningful.
-// Voting: a single sequential counts[2] increment loop, no synchronization
-// needed since there's only one thread.
 static int voteSerial(const std::vector<Neighbor>& neighbors, const std::vector<int>& labels) {
     int counts[2] = {0, 0};
     for (const auto& nb : neighbors) {
