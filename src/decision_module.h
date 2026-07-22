@@ -1,3 +1,13 @@
+/*
+ * CS-387L - Parallel & Distributed Computing Lab
+ * Parallel Fraud Detection System
+ *
+ * Group Members:
+ *   Javairia Waseem   - 231400097
+ *   Kashaf Ul Hassan  - 231400102
+ *   Ajwa Imran        - 231400105
+ */
+
 #ifndef DECISION_MODULE_H
 #define DECISION_MODULE_H
 
