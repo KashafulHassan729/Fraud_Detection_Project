@@ -101,7 +101,7 @@ int main(int argc, char** argv) {
                     Kval, serial_pred, serial_sel_ms, serial_vote_ms, 1.0);
         }
 
-        // --- Parallel: atomic and reduction, each compared back to serial ---
+        
         for (int mode = 0; mode < 2; ++mode) {
             bool useReduction = (mode == 1);
             double sel_ms = 0.0, vote_ms = 0.0;
@@ -120,7 +120,7 @@ int main(int argc, char** argv) {
     }
     if (module3_csv) fclose(module3_csv);
 
-    // ===== Hardcoded validation queries (3+ test cases) =====
+  
     printf("\n===== VALIDATION QUERIES =====\n");
     struct TestQuery { const char* name; vector<float> vec; };
     vector<TestQuery> testQueries = {
@@ -136,7 +136,7 @@ int main(int argc, char** argv) {
         printf("[%-30s] predicted = %s\n", tq.name, pred ? "FRAUD" : "NON-FRAUD");
     }
 
-    // ===== Automated output routing to performance_report.csv =====
+    
     FILE* report = fopen("output/performance_report.csv", "a");
     if (report) {
         fseek(report, 0, SEEK_END);
