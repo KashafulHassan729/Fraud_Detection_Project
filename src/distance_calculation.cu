@@ -20,8 +20,6 @@
 
 #define TILE_ROWS 256
 
-// ================= Module 2a: Naive baseline kernel =================
-
 __global__ void distance_kernel_naive(
     const float* query,
     const float* historical,
@@ -40,7 +38,6 @@ __global__ void distance_kernel_naive(
     distances[idx] = sqrtf(sum);
 }
 
-// ================= Module 2b: Tiled shared-memory kernel =================
 
 __global__ void distance_kernel_tiled(
     const float* __restrict__ query,
@@ -50,10 +47,10 @@ __global__ void distance_kernel_tiled(
     int num_features
 ) {
     extern __shared__ float smem[];
-    float* s_query = smem;                    // size: num_features
-    float* s_tile  = smem + num_features;      // size: TILE_ROWS * num_features
+    float* s_query = smem;                    
+    float* s_tile  = smem + num_features;      
 
-    // Load query into shared memory
+   
     for (int i = threadIdx.x; i < num_features; i += blockDim.x) {
         s_query[i] = query[i];
     }
@@ -84,7 +81,6 @@ __global__ void distance_kernel_tiled(
     }
 }
 
-// ================= Host wrapper: naive =================
 void compute_distances_cuda(
     const float* h_query,
     const float* h_historical,
@@ -112,7 +108,6 @@ void compute_distances_cuda(
     cudaFree(d_distances);
 }
 
-// ================= Host wrapper: tiled =================
 void compute_distances_tiled(
     const float* h_query,
     const float* h_historical,
@@ -141,7 +136,6 @@ void compute_distances_tiled(
     cudaFree(d_distances);
 }
 
-// ================= Benchmark: naive vs tiled kernel time =================
 void benchmark_naive_vs_tiled(
     const float* h_query,
     const float* h_historical,
@@ -161,7 +155,7 @@ void benchmark_naive_vs_tiled(
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
-    // --- Naive ---
+    // Naive
     int threads = 256;
     int blocks = (num_rows + threads - 1) / threads;
     cudaEventRecord(start);
@@ -170,7 +164,7 @@ void benchmark_naive_vs_tiled(
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&naive_ms_out, start, stop);
 
-    // --- Tiled ---
+    // Tiled
     int tiled_blocks = (num_rows + TILE_ROWS - 1) / TILE_ROWS;
     size_t shmem_bytes = (num_features + (size_t)TILE_ROWS * num_features) * sizeof(float);
     cudaEventRecord(start);
@@ -190,7 +184,6 @@ void benchmark_naive_vs_tiled(
     cudaFree(d_distances);
 }
 
-// ================= Benchmark: pinned vs pageable H2D transfer =================
 void benchmark_pinned_vs_pageable(
     const float* h_historical_source,
     int num_rows,
@@ -204,7 +197,7 @@ void benchmark_pinned_vs_pageable(
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
-    // --- Pageable (regular malloc/new, OS can swap it) ---
+    
     float* h_pageable = (float*)malloc(bytes);
     memcpy(h_pageable, h_historical_source, bytes);
     float* d_buf_a;
@@ -216,7 +209,7 @@ void benchmark_pinned_vs_pageable(
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&pageable_ms_out, start, stop);
 
-    // --- Pinned (page-locked, DMA-able) ---
+ 
     float* h_pinned;
     cudaHostAlloc((void**)&h_pinned, bytes, cudaHostAllocDefault);
     memcpy(h_pinned, h_historical_source, bytes);
@@ -241,7 +234,6 @@ void benchmark_pinned_vs_pageable(
     cudaFree(d_buf_b);
 }
 
-// ================= Module 4: Hybrid batched + streamed pipeline =================
 
 static void prepare_batch_cpu(
     const float* h_source,
@@ -282,7 +274,7 @@ void compute_distances_hybrid_streamed(
     cudaMalloc(&d_query, num_features * sizeof(float));
     cudaMemcpy(d_query, h_query, num_features * sizeof(float), cudaMemcpyHostToDevice);
 
-    // Double-buffered PINNED staging (CPU writes here, GPU reads via async copy)
+   
     float* h_pinned_buf[NUM_STREAMS];
     float* d_historical_buf[NUM_STREAMS];
     float* d_distances_buf[NUM_STREAMS];
@@ -310,7 +302,7 @@ void compute_distances_hybrid_streamed(
         return std::min(batch_size, num_rows - row_start);
     };
 
-    // Prepare batch 0 synchronously (nothing to overlap with yet)
+    
     double t0 = omp_get_wtime();
     prepare_batch_cpu(h_source, h_pinned_buf[0], 0, batch_rows(0), num_features);
     total_cpu_prep_ms_out += (omp_get_wtime() - t0) * 1000.0;
@@ -324,7 +316,6 @@ void compute_distances_hybrid_streamed(
         int rows_this_batch = batch_rows(b);
         size_t bytes_this_batch = (size_t)rows_this_batch * num_features * sizeof(float);
 
-        // Launch CPU prep for batch N+1 on a background thread FIRST,
         
         std::future<double> cpu_future;
         bool has_next = (b + 1 < num_batches);
@@ -338,7 +329,7 @@ void compute_distances_hybrid_streamed(
             });
         }
 
-        // GPU side for CURRENT batch
+   
         cudaEventRecord(xfer_start[slot], s);
         cudaMemcpyAsync(
             d_historical_buf[slot],
